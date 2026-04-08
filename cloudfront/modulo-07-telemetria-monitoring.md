@@ -8,21 +8,31 @@
 
 ## Mapa de Observabilidade
 
+```mermaid
+graph TB
+    CF[CloudFront Distribution]
+
+    CF --> LOGS[Logs]
+    CF --> METRICS[Metricas]
+    CF --> REPORTS[Reports]
+
+    LOGS --> SL[Standard Logs<br/>S3 + Athena<br/>D.39]
+    LOGS --> RL[Real-Time Logs<br/>Kinesis Data Streams<br/>D.40]
+
+    METRICS --> CW[CloudWatch Metrics<br/>Dashboard<br/>D.41]
+    METRICS --> AL[CloudWatch Alarms<br/>Anomaly Detection<br/>D.42]
+
+    REPORTS --> CR[Console Reports<br/>Cache Stats, Usage<br/>D.43]
+    REPORTS --> OBS[Observabilidade E2E<br/>Runbooks<br/>D.44]
+
+    SL --> ATHENA[Athena SQL Queries]
+    RL --> LAMBDA[Lambda Consumer]
+
+    style CF fill:#0f3460,color:#fff
+    style LOGS fill:#533483,color:#fff
+    style METRICS fill:#e94560,color:#fff
+    style REPORTS fill:#16213e,color:#fff
 ```
-                    ┌──────────────────────────────────────────────────┐
-                    │              OBSERVABILIDADE CLOUDFRONT           │
-                    └──────────────────────────────────────────────────┘
-                                         │
-              ┌──────────────────────────┼──────────────────────────┐
-              │                          │                          │
-        ┌─────┴─────┐           ┌────────┴────────┐        ┌───────┴───────┐
-        │   LOGS     │           │    MÉTRICAS      │        │   REPORTS     │
-        └─────┬─────┘           └────────┬────────┘        └───────┬───────┘
-              │                          │                          │
-      ┌───────┼───────┐          ┌───────┼───────┐          ┌──────┼──────┐
-      │               │          │               │          │             │
-  Standard       Real-Time   CloudWatch      Additional   Console     Athena
-  Logs (S3)     Logs(Kinesis) Metrics        Metrics      Reports    Queries
       │               │          │               │          │             │
    Athena          Lambda     Dashboards     Per-edge   Cache Stats  Custom
    Queries        Consumer    + Alarms       Per-code   Popular Obj  Analysis

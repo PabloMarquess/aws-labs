@@ -21,24 +21,56 @@ Amazon CloudFront é uma **Content Delivery Network (CDN)** global da AWS. Ele d
 
 ### Arquitetura CloudFront
 
+```mermaid
+graph LR
+    A[Usuário] -->|Request| B[Edge Location]
+    B -->|Cache HIT| A
+    B -->|Cache MISS| C[Regional Edge Cache]
+    C -->|Cache HIT| B
+    C -->|Cache MISS| D[Origin]
+    D -->|Resposta| C
+    C -->|Cache + Resposta| B
+    B -->|Cache + Resposta| A
+
+    style A fill:#e94560,color:#fff
+    style B fill:#0f3460,color:#fff
+    style C fill:#16213e,color:#fff
+    style D fill:#533483,color:#fff
 ```
-Usuário → Edge Location → Regional Edge Cache → Origin (S3, ALB, EC2, Custom)
+
+- **Edge Location**: Ponto de presenca mais proximo do usuario (~600+)
+- **Regional Edge Cache (REC)**: Cache intermediario entre edge e origin (~13 locais)
+- **Origin**: Servidor de origem do conteudo (S3, ALB, EC2, Custom)
+
+### Fluxo de uma Requisicao
+
+```mermaid
+sequenceDiagram
+    participant U as Usuario
+    participant E as Edge Location
+    participant R as Regional Edge Cache
+    participant O as Origin (S3)
+
+    U->>E: GET /index.html
+    Note over E: Verifica cache local
+
+    alt Cache HIT
+        E-->>U: 200 OK (x-cache: Hit)
+    else Cache MISS
+        E->>R: Forward request
+        Note over R: Verifica cache regional
+        alt REC HIT
+            R-->>E: Resposta cacheada
+        else REC MISS
+            R->>O: Busca na origin
+            O-->>R: Resposta original
+            Note over R: Cacheia resposta
+        end
+        R-->>E: Resposta
+        Note over E: Cacheia resposta
+        E-->>U: 200 OK (x-cache: Miss)
+    end
 ```
-
-- **Edge Location**: Ponto de presença mais próximo do usuário (~600+)
-- **Regional Edge Cache (REC)**: Cache intermediário entre edge e origin (~13 locais)
-- **Origin**: Servidor de origem do conteúdo
-
-### Fluxo de uma Requisição
-
-1. Usuário faz request para `d1234abcdef.cloudfront.net`
-2. DNS resolve para o edge location mais próximo (anycast)
-3. Edge verifica se tem o objeto em cache
-4. **Cache HIT** → Retorna direto do edge (latência mínima)
-5. **Cache MISS** → Consulta Regional Edge Cache
-6. Se REC também não tem → Vai até a Origin buscar o conteúdo
-7. Conteúdo é cacheado no caminho de volta (REC → Edge)
-8. Próximas requests do mesmo objeto = Cache HIT
 
 ---
 
@@ -54,16 +86,43 @@ Este é o caso de uso mais clássico do CloudFront: servir conteúdo estático a
 - AWS CLI configurada
 - Conta AWS ativa
 
+### O Que Vamos Construir
+
+```mermaid
+graph TB
+    subgraph Internet
+        U[Usuario]
+    end
+
+    subgraph AWS
+        CF[CloudFront Distribution]
+        OAC[Origin Access Control]
+        S3[S3 Bucket<br/>index.html + error.html]
+    end
+
+    U -->|HTTPS| CF
+    CF -->|SigV4 via OAC| S3
+    OAC -.->|Autoriza acesso| S3
+    U -.-x|Bloqueado| S3
+
+    style U fill:#e94560,color:#fff
+    style CF fill:#0f3460,color:#fff
+    style OAC fill:#16213e,color:#fff
+    style S3 fill:#533483,color:#fff
+```
+
 ### Passo a Passo
 
 #### 1. Criar o Bucket S3
 
 ```bash
-# Criar bucket (substitua pelo seu nome único)
+# Criar bucket (substitua pelo seu nome unico)
 aws s3 mb s3://meu-site-cloudfront-lab-001 --region us-east-1
+```
 
-# Criar um arquivo HTML simples
-cat > index.html << 'EOF'
+Crie o arquivo `index.html` para a pagina principal:
+
+```html
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -78,24 +137,27 @@ cat > index.html << 'EOF'
 <body>
     <h1>CloudFront Lab - Desafio 1</h1>
     <div class="info">
-        <p>Se você está vendo esta página, sua distribuição CloudFront está funcionando!</p>
+        <p>Se voce esta vendo esta pagina, sua distribuicao CloudFront esta funcionando!</p>
         <p>Timestamp: <span id="ts"></span></p>
     </div>
     <script>document.getElementById('ts').textContent = new Date().toISOString();</script>
 </body>
 </html>
-EOF
+```
 
-# Criar página de erro
-cat > error.html << 'EOF'
+Crie o arquivo `error.html` para paginas de erro:
+
+```html
 <!DOCTYPE html>
 <html>
 <head><title>Erro</title></head>
-<body><h1>Ops! Página não encontrada.</h1></body>
+<body><h1>Ops! Pagina nao encontrada.</h1></body>
 </html>
-EOF
+```
 
-# Upload dos arquivos
+Faca o upload dos arquivos para o S3:
+
+```bash
 aws s3 cp index.html s3://meu-site-cloudfront-lab-001/index.html --content-type "text/html"
 aws s3 cp error.html s3://meu-site-cloudfront-lab-001/error.html --content-type "text/html"
 ```
@@ -291,6 +353,28 @@ Navegar por todas as abas e configurações de uma distribution no Console AWS, 
 ### Contexto
 O console é onde você vai diagnosticar problemas no dia a dia. Conhecer cada aba e opção economiza horas de debug.
 
+### Anatomia de uma Distribution
+
+```mermaid
+graph TB
+    DIST[CloudFront Distribution]
+
+    DIST --> GEN[General<br/>ID, Status, Domain, Price Class<br/>WAF, HTTPS, HTTP Version]
+    DIST --> ORI[Origins<br/>S3, ALB, EC2, Custom<br/>OAC, Shield, Timeouts]
+    DIST --> BEH[Behaviors<br/>Path Patterns, Cache Policy<br/>ORP, RHP, Functions]
+    DIST --> ERR[Error Pages<br/>Custom 404, 403, 500<br/>Error TTL]
+    DIST --> INV[Invalidations<br/>Paths, Wildcard<br/>Status]
+    DIST --> TAG[Tags<br/>Billing, Organization]
+
+    style DIST fill:#0f3460,color:#fff
+    style GEN fill:#16213e,color:#fff
+    style ORI fill:#533483,color:#fff
+    style BEH fill:#e94560,color:#fff
+    style ERR fill:#16213e,color:#fff
+    style INV fill:#533483,color:#fff
+    style TAG fill:#16213e,color:#fff
+```
+
 ### Passo a Passo
 
 Acesse o console AWS → CloudFront → Clique na distribuição criada no Desafio 1.
@@ -412,6 +496,43 @@ Configurar um domínio customizado (CNAME) com certificado SSL do ACM na sua dis
 
 ### Contexto
 Em produção, ninguém usa `d1234abcdef.cloudfront.net`. Você precisa de um domínio bonito como `cdn.meusite.com` com HTTPS.
+
+### O Que Vamos Construir
+
+```mermaid
+graph LR
+    subgraph Usuario
+        B[Browser]
+    end
+
+    subgraph Route 53
+        DNS[cdn.meusite.com<br/>ALIAS record]
+    end
+
+    subgraph CloudFront
+        CF[Distribution<br/>+ ACM Certificate<br/>+ CNAME]
+    end
+
+    subgraph S3
+        S3B[Bucket Origin]
+    end
+
+    subgraph ACM [ACM - us-east-1]
+        CERT[SSL Certificate<br/>cdn.meusite.com<br/>*.meusite.com]
+    end
+
+    B -->|1. DNS lookup| DNS
+    DNS -->|2. Resolve to CF| CF
+    B -->|3. HTTPS request| CF
+    CERT -.->|TLS termination| CF
+    CF -->|4. Fetch content| S3B
+
+    style B fill:#e94560,color:#fff
+    style CF fill:#0f3460,color:#fff
+    style CERT fill:#16213e,color:#fff
+    style DNS fill:#533483,color:#fff
+    style S3B fill:#1a1a2e,color:#fff
+```
 
 ### Requisitos
 - Um domínio registrado (Route 53 ou externo)
@@ -613,6 +734,34 @@ Dominar o processo de invalidação de cache no CloudFront, entendendo quando us
 ### Contexto
 Você fez deploy de uma correção urgente, mas os usuários ainda veem a versão antiga. O cache precisa ser limpo. Invalidation é a ferramenta, mas não é a única estratégia.
 
+### Fluxo de Invalidação
+
+```mermaid
+sequenceDiagram
+    participant Dev as Desenvolvedor
+    participant API as CloudFront API
+    participant E1 as Edge SP
+    participant E2 as Edge Virginia
+    participant E3 as Edge Frankfurt
+
+    Dev->>API: CreateInvalidation /index.html
+    API-->>Dev: InvalidationId: I123 (InProgress)
+
+    par Propagação Global
+        API->>E1: Invalidar /index.html
+        API->>E2: Invalidar /index.html
+        API->>E3: Invalidar /index.html
+    end
+
+    Note over E1,E3: ~1-2 minutos para propagar
+
+    E1-->>API: OK
+    E2-->>API: OK
+    E3-->>API: OK
+
+    API-->>Dev: Status: Completed
+```
+
 ### Passo a Passo
 
 #### 1. Invalidação Básica — Um Arquivo
@@ -670,39 +819,54 @@ aws cloudfront get-invalidation \
 
 Em vez de invalidar, use versionamento nos nomes de arquivo:
 
+**Abordagem tradicional** (precisa invalidar a cada mudança):
+
 ```html
-<!-- Em vez disso (precisa invalidar a cada mudança): -->
 <link rel="stylesheet" href="/css/style.css">
 <script src="/js/app.js"></script>
+```
 
-<!-- Use isto (nunca precisa invalidar): -->
+**Com hash no nome** (nunca precisa invalidar):
+
+```html
 <link rel="stylesheet" href="/css/style.v2.1.0.css">
 <script src="/js/app.abc123.js"></script>
+```
 
-<!-- Ou com query string (funciona se a cache policy incluir query strings): -->
+**Com query string** (funciona se a cache policy incluir query strings):
+
+```html
 <link rel="stylesheet" href="/css/style.css?v=2.1.0">
 <script src="/js/app.js?h=abc123"></script>
 ```
 
 #### 6. Alternativa: Cache-Control Headers na Origin
 
+Para conteudo que muda frequentemente, defina TTL baixo no upload:
+
 ```bash
-# Ao fazer upload para S3, definir TTL baixo para arquivos que mudam frequentemente
 aws s3 cp index.html s3://meu-site-cloudfront-lab-001/index.html \
     --content-type "text/html" \
     --cache-control "max-age=300, s-maxage=60"
+```
 
-# max-age=300   → Browser cacheia por 5 min
-# s-maxage=60   → CloudFront cacheia por 1 min (tem prioridade sobre max-age para CDN)
+| Header | Significado |
+|--------|-------------|
+| `max-age=300` | Browser cacheia por 5 min |
+| `s-maxage=60` | CloudFront cacheia por 1 min (prioridade sobre max-age para CDN) |
 
-# Para assets estáticos (raramente mudam), TTL alto:
+Para assets estaticos (raramente mudam), TTL alto:
+
+```bash
 aws s3 cp style.css s3://meu-site-cloudfront-lab-001/css/style.v2.css \
     --content-type "text/css" \
     --cache-control "max-age=31536000, immutable"
-
-# max-age=31536000 → 1 ano
-# immutable        → Diz ao browser que nunca vai mudar
 ```
+
+| Header | Significado |
+|--------|-------------|
+| `max-age=31536000` | 1 ano |
+| `immutable` | Diz ao browser que o recurso nunca mudara naquela URL |
 
 ### Como Testar
 
@@ -769,6 +933,52 @@ Recriar tudo que fizemos nos Desafios 1-4 usando Terraform, estabelecendo a base
 
 ### Contexto
 Em produção real, ninguém cria CloudFront pelo console ou CLI manualmente. Terraform é o padrão de mercado para gerenciar infraestrutura CloudFront de forma reprodutível e versionada.
+
+### O Que Vamos Construir
+
+```mermaid
+graph TB
+    subgraph Terraform
+        TF[terraform apply]
+    end
+
+    subgraph us-east-1
+        ACM[ACM Certificate<br/>cdn.meusite.com]
+    end
+
+    subgraph Route 53
+        DNS_VAL[CNAME Validation]
+        DNS_A[A Record ALIAS]
+    end
+
+    subgraph CloudFront
+        OAC[Origin Access Control]
+        CF[Distribution<br/>HTTPS + Compress<br/>Error Pages]
+    end
+
+    subgraph S3
+        BUCKET[Bucket<br/>Versioning + Encryption<br/>Block Public Access]
+        POLICY[Bucket Policy<br/>Allow CF only]
+        FILES[index.html<br/>error.html]
+    end
+
+    TF --> ACM
+    TF --> CF
+    TF --> BUCKET
+    TF --> DNS_A
+
+    ACM -.->|DNS validation| DNS_VAL
+    ACM -.->|TLS cert| CF
+    DNS_A -.->|Resolve to| CF
+    CF -->|OAC SigV4| BUCKET
+    OAC -.-> POLICY
+    FILES -.-> BUCKET
+
+    style TF fill:#7b2cbf,color:#fff
+    style CF fill:#0f3460,color:#fff
+    style ACM fill:#16213e,color:#fff
+    style BUCKET fill:#533483,color:#fff
+```
 
 ### Passo a Passo
 

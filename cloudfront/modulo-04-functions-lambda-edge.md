@@ -9,11 +9,31 @@
 
 ### CloudFront Functions vs Lambda@Edge
 
-```
-Viewer Request → CloudFront Function → Cache Lookup → Lambda@Edge (Origin Request) → Origin
-                                                                                        │
-Viewer ← CloudFront Function ← Cache ← Lambda@Edge (Origin Response) ← ──────────────┘
-         (Viewer Response)                                               Origin Response
+```mermaid
+sequenceDiagram
+    participant V as Viewer
+    participant CF as CF Function<br/>(Edge Location)
+    participant Cache as Cache
+    participant LE as Lambda@Edge<br/>(Regional Edge)
+    participant O as Origin
+
+    V->>CF: 1. Viewer Request
+    Note over CF: URL rewrite, redirects,<br/>header manipulation
+
+    CF->>Cache: Cache lookup
+    alt Cache HIT
+        Cache-->>CF: Cached response
+    else Cache MISS
+        Cache->>LE: 2. Origin Request
+        Note over LE: Auth, A/B test,<br/>origin selection
+        LE->>O: Forward to origin
+        O-->>LE: 3. Origin Response
+        Note over LE: Add headers,<br/>transform response
+        LE-->>Cache: Cache + forward
+    end
+
+    CF-->>V: 4. Viewer Response
+    Note over CF: Security headers,<br/>cookie manipulation
 ```
 
 | Característica | CloudFront Functions | Lambda@Edge |
@@ -32,11 +52,21 @@ Viewer ← CloudFront Function ← Cache ← Lambda@Edge (Origin Response) ← �
 
 ### Os 4 Event Types
 
-```
-1. VIEWER REQUEST   — Antes do cache lookup (ideal para manipulação de URL/headers)
-2. ORIGIN REQUEST   — Depois de cache miss, antes de ir à origin
-3. ORIGIN RESPONSE  — Depois de receber resposta da origin
-4. VIEWER RESPONSE  — Antes de enviar resposta ao viewer
+```mermaid
+graph LR
+    VR[1. Viewer Request<br/>CF Function ou L@E] --> CL{Cache<br/>Lookup}
+    CL -->|MISS| OR[2. Origin Request<br/>Lambda@Edge only]
+    OR --> ORIGIN[Origin]
+    ORIGIN --> ORP[3. Origin Response<br/>Lambda@Edge only]
+    ORP --> CL
+    CL -->|HIT ou response| VRP[4. Viewer Response<br/>CF Function ou L@E]
+    VRP --> VIEWER[Viewer]
+
+    style VR fill:#0f3460,color:#fff
+    style OR fill:#533483,color:#fff
+    style ORP fill:#533483,color:#fff
+    style VRP fill:#0f3460,color:#fff
+    style CL fill:#e94560,color:#fff
 ```
 
 ### Quando Usar Cada Um

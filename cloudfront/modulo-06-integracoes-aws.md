@@ -8,18 +8,29 @@
 
 ## Mapa de Integrações
 
-```
-                              ┌──────────────┐
-                              │  CloudFront   │
-                              └──────┬───────┘
-                                     │
-         ┌────────┬────────┬─────────┼─────────┬────────┬────────┐
-         │        │        │         │         │        │        │
-       ┌─┴─┐   ┌─┴─┐   ┌──┴──┐   ┌─┴─┐   ┌──┴──┐  ┌─┴─┐   ┌─┴──┐
-       │S3 │   │ALB│   │APIGW│   │EC2│   │Lambda│  │ECS│   │Media│
-       │   │   │NLB│   │     │   │   │   │ URLs │  │EKS│   │Pkg  │
-       └───┘   └───┘   └─────┘   └───┘   └─────┘  └───┘   └────┘
-       D.31    D.32     D.33     D.35     D.34     D.38    D.36
+```mermaid
+graph TB
+    CF[CloudFront Distribution]
+
+    CF --> S3[S3 Bucket<br/>D.31]
+    CF --> ALB[ALB / NLB<br/>D.32]
+    CF --> APIGW[API Gateway<br/>D.33]
+    CF --> LAMBDA[Lambda Function URLs<br/>D.34]
+    CF --> EC2[EC2 Direct<br/>D.35]
+    CF --> MEDIA[MediaPackage<br/>MediaConvert<br/>D.36]
+    CF --> ECS[ECS Fargate + ALB<br/>D.38]
+
+    GA[Global Accelerator<br/>D.37] -.->|Comparativo| CF
+
+    style CF fill:#0f3460,color:#fff
+    style S3 fill:#533483,color:#fff
+    style ALB fill:#533483,color:#fff
+    style APIGW fill:#533483,color:#fff
+    style LAMBDA fill:#533483,color:#fff
+    style EC2 fill:#16213e,color:#fff
+    style MEDIA fill:#16213e,color:#fff
+    style ECS fill:#16213e,color:#fff
+    style GA fill:#e94560,color:#fff
 ```
 
 ---

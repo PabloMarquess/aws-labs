@@ -40,13 +40,24 @@ Behavior = Path Pattern + Origin + Cache Policy + Origin Request Policy + Respon
 
 CloudFront avalia behaviors **de cima para baixo** (mais específico primeiro):
 
-```
-1. /api/v1/*          → Origin: ALB (API)
-2. /api/*             → Origin: ALB (API)
-3. /images/*          → Origin: S3 (Assets)
-4. /static/*          → Origin: S3 (Assets)
-5. *.php              → Origin: EC2 (PHP App)
-6. Default (*)        → Origin: S3 (Website)
+```mermaid
+graph TD
+    REQ[Request: /api/v1/users] --> B1{/api/v1/*}
+    B1 -->|Match| O1[Origin: ALB API]
+    B1 -->|No match| B2{/api/*}
+    B2 -->|Match| O2[Origin: ALB API]
+    B2 -->|No match| B3{/images/*}
+    B3 -->|Match| O3[Origin: S3 Assets]
+    B3 -->|No match| B4{/static/*}
+    B4 -->|Match| O4[Origin: S3 Assets]
+    B4 -->|No match| B5{*.php}
+    B5 -->|Match| O5[Origin: EC2 PHP]
+    B5 -->|No match| B6[Default *]
+    B6 --> O6[Origin: S3 Website]
+
+    style REQ fill:#e94560,color:#fff
+    style B1 fill:#0f3460,color:#fff
+    style B6 fill:#533483,color:#fff
 ```
 
 > **Importante:** O `Default (*)` é **obrigatório** e é o último a ser avaliado. Ele captura tudo que não deu match nos behaviors anteriores.
@@ -63,26 +74,21 @@ Este é o cenário mais comum em produção: um frontend SPA (React/Vue/Angular)
 
 ### Arquitetura
 
-```
-                         ┌─────────────┐
-                         │  CloudFront  │
-                         │ app.site.com │
-                         └──────┬───────┘
-                                │
-                    ┌───────────┼───────────┐
-                    │                       │
-              /api/*                    Default (*)
-                    │                       │
-              ┌─────┴─────┐          ┌──────┴──────┐
-              │    ALB    │          │   S3 Bucket  │
-              │  (API)    │          │  (Frontend)  │
-              └─────┬─────┘          └─────────────┘
-                    │
-            ┌───────┼───────┐
-            │       │       │
-         ┌──┴──┐ ┌──┴──┐ ┌──┴──┐
-         │ ECS │ │ ECS │ │ ECS │
-         └─────┘ └─────┘ └─────┘
+```mermaid
+graph TB
+    U[Usuario] -->|HTTPS| CF[CloudFront<br/>app.site.com]
+
+    CF -->|"/api/*"| ALB[Application Load Balancer]
+    CF -->|"Default (*)"| S3[S3 Bucket<br/>Frontend SPA]
+
+    ALB --> ECS1[ECS Task 1]
+    ALB --> ECS2[ECS Task 2]
+    ALB --> ECS3[ECS Task 3]
+
+    style U fill:#e94560,color:#fff
+    style CF fill:#0f3460,color:#fff
+    style ALB fill:#533483,color:#fff
+    style S3 fill:#16213e,color:#fff
 ```
 
 ### Passo a Passo

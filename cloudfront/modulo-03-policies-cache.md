@@ -9,16 +9,19 @@
 
 ### Os Três Tipos de Policy
 
-```
-Viewer (Usuário) ──→ CloudFront Edge ──→ Origin (Servidor)
-                          │
-              ┌───────────┼───────────┐
-              │           │           │
-        Cache Policy  Origin Req   Response Headers
-        (como cachear) Policy      Policy
-                      (o que       (o que adicionar
-                       enviar       na resposta)
-                       à origin)
+```mermaid
+graph LR
+    V[Viewer<br/>Usuario] -->|Request| E[CloudFront Edge]
+    E -->|Origin Request Policy<br/>define o que enviar| O[Origin<br/>Servidor]
+    O -->|Resposta| E
+    E -->|Response Headers Policy<br/>adiciona headers| V
+
+    CP[Cache Policy<br/>TTL + Cache Key] -.->|Controla| E
+
+    style V fill:#e94560,color:#fff
+    style E fill:#0f3460,color:#fff
+    style O fill:#533483,color:#fff
+    style CP fill:#16213e,color:#fff
 ```
 
 | Policy | O Que Faz | Direção |
