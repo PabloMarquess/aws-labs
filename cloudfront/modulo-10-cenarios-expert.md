@@ -12,18 +12,22 @@ Este é o módulo culminante do guia. Aqui você enfrentará cenários que combi
 conhecimentos adquiridos nos módulos anteriores. Cada desafio simula uma situação real que
 arquitetos de soluções e engenheiros DevOps enfrentam em empresas de grande porte.
 
-```
-╔══════════════════════════════════════════════════════════════════╗
-║                   MÓDULO 10 — O GRAND FINALE                    ║
-║                                                                  ║
-║  Desafio 56: E-commerce Black Friday (Capstone)                 ║
-║  Desafio 57: Multi-Region Active-Active                         ║
-║  Desafio 58: Migração de CDN                                    ║
-║  Desafio 59: Video Streaming Platform                           ║
-║  Desafio 60: Certificação e Próximos Passos                     ║
-║                                                                  ║
-║  "De estudante a especialista — a jornada completa."            ║
-╚══════════════════════════════════════════════════════════════════╝
+```mermaid
+graph TB
+    MOD[Módulo 10 — Grand Finale<br/>Cenários Reais de Produção]
+
+    MOD --> D56[D.56 CAPSTONE<br/>E-commerce Black Friday<br/>100k req/s]
+    MOD --> D57[D.57 Multi-Region<br/>Active-Active<br/>Latência global]
+    MOD --> D58[D.58 Migração CDN<br/>Akamai/Cloudflare<br/>para CloudFront]
+    MOD --> D59[D.59 Video Streaming<br/>Live + VOD<br/>MediaPackage]
+    MOD --> D60[D.60 Certificação<br/>Próximos Passos<br/>AWS Specialty]
+
+    style MOD fill:#e94560,color:#fff
+    style D56 fill:#0f3460,color:#fff
+    style D57 fill:#533483,color:#fff
+    style D58 fill:#16213e,color:#fff
+    style D59 fill:#533483,color:#fff
+    style D60 fill:#16213e,color:#fff
 ```
 
 ---
@@ -64,98 +68,58 @@ segurança robusta e performance otimizada globalmente.
 
 ### Diagrama de Arquitetura
 
+```mermaid
+graph TB
+    USERS[Internet / Clientes] --> R53[Route 53<br/>loja.exemplo.com.br]
+    R53 --> SHIELD[AWS Shield Advanced<br/>DDoS L3/L4]
+    SHIELD --> WAF[AWS WAF v2<br/>Rate Limit · SQLi/XSS · Bot Control<br/>Geo Block · IP Reputation]
+
+    WAF --> CF[CloudFront Distribution]
+
+    subgraph CF_INNER ["CloudFront Edge"]
+        OS[Origin Shield sa-east-1]
+        FUNC1[CF Function<br/>URL Normalize]
+        FUNC2[CF Function<br/>A/B Testing]
+        FUNC3[CF Function<br/>Geo-Redirect]
+        LE[Lambda@Edge<br/>JWT Auth]
+    end
+
+    CF --> CF_INNER
+
+    CF_INNER -->|"/* (default)"| S3_SPA[S3 — React SPA<br/>OAC enabled]
+    CF_INNER -->|"/api/*"| ALB_API[ALB + ECS<br/>Auto Scaling 10-200<br/>4 vCPU/8GB]
+    CF_INNER -->|"/media/*"| S3_MEDIA[S3 — Media Assets<br/>Images · Videos<br/>OAC enabled]
+    CF_INNER -->|"/ws/*"| ALB_WS[ALB — WebSocket<br/>Notifications · Cart]
+
+    ALB_API --> CW[CloudWatch<br/>Dashboard · Alarms · Logs]
+
+    style USERS fill:#e94560,color:#fff
+    style SHIELD fill:#16213e,color:#fff
+    style WAF fill:#0f3460,color:#fff
+    style CF fill:#533483,color:#fff
+    style S3_SPA fill:#16213e,color:#fff
+    style ALB_API fill:#533483,color:#fff
+    style S3_MEDIA fill:#16213e,color:#fff
+    style ALB_WS fill:#533483,color:#fff
 ```
-                            ┌─────────────────────────────────────────────────────────────┐
-                            │                     INTERNET / CLIENTES                      │
-                            └───────────────────────────┬─────────────────────────────────┘
-                                                        │
-                                                        ▼
-                            ┌─────────────────────────────────────────────────────────────┐
-                            │                    Route 53 (DNS)                            │
-                            │              loja.exemplo.com.br                             │
-                            │         ALIAS → CloudFront Distribution                     │
-                            └───────────────────────────┬─────────────────────────────────┘
-                                                        │
-                                                        ▼
-                    ┌───────────────────────────────────────────────────────────────────┐
-                    │                        AWS Shield Advanced                        │
-                    │                   Proteção DDoS L3/L4 automática                  │
-                    └───────────────────────────┬───────────────────────────────────────┘
-                                                │
-                                                ▼
-        ┌───────────────────────────────────────────────────────────────────────────────────┐
-        │                              AWS WAF v2                                           │
-        │                                                                                   │
-        │   ┌─────────────┐  ┌──────────────┐  ┌────────────┐  ┌─────────────────────────┐ │
-        │   │ Rate Limit  │  │  SQL/XSS     │  │  Bot       │  │  Geo-Block              │ │
-        │   │ 2000 req/   │  │  Injection   │  │  Control   │  │  (países sancionados)   │ │
-        │   │ 5min/IP     │  │  Protection  │  │  Managed   │  │                         │ │
-        │   └─────────────┘  └──────────────┘  └────────────┘  └─────────────────────────┘ │
-        │                                                                                   │
-        │   ┌─────────────────────┐  ┌────────────────────────────────────────────────────┐ │
-        │   │  IP Reputation      │  │  Custom Rules (Header validation, URI patterns)    │ │
-        │   │  (AWS Managed)      │  │                                                    │ │
-        │   └─────────────────────┘  └────────────────────────────────────────────────────┘ │
-        └───────────────────────────────────┬───────────────────────────────────────────────┘
-                                            │
-                                            ▼
-┌──────────────────────────────────────────────────────────────────────────────────────────────┐
-│                             CloudFront Distribution                                          │
-│                          d1234abcdef.cloudfront.net                                          │
-│                                                                                              │
-│  ┌─────────────────────────────────────────────────────────────────────────────────────────┐ │
-│  │                            Origin Shield (sa-east-1)                                    │ │
-│  │                     Camada extra de cache — reduz carga na origem                       │ │
-│  └─────────────────────────────────────────────────────────────────────────────────────────┘ │
-│                                                                                              │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐  ┌─────────────────────┐  │
-│  │  CF Function:    │  │  CF Function:    │  │  CF Function:    │  │  Lambda@Edge:       │  │
-│  │  URL Normalize   │  │  A/B Testing     │  │  Geo-Redirect    │  │  JWT Auth           │  │
-│  │  (Viewer Req)    │  │  (Viewer Req)    │  │  (Viewer Req)    │  │  (Viewer Req)       │  │
-│  └──────────────────┘  └──────────────────┘  └──────────────────┘  └─────────────────────┘  │
-│                                                                                              │
-│  BEHAVIORS:                                                                                  │
-│  ┌──────────────────────────────────────────────────────────────────────────────────────┐    │
-│  │ Path Pattern          │ Origin          │ Cache   │ TTL    │ Funções               │    │
-│  │───────────────────────│─────────────────│─────────│────────│───────────────────────│    │
-│  │ /api/v1/config        │ ALB (API)       │ 60s     │ 60s    │ JWT Auth              │    │
-│  │ /api/*                │ ALB (API)       │ Disabled│ 0      │ JWT Auth              │    │
-│  │ /ws/*                 │ ALB (WebSocket) │ Disabled│ 0      │ —                     │    │
-│  │ /media/*              │ S3 (Media)      │ 30 dias │ 2592000│ —                     │    │
-│  │ /static/*             │ S3 (SPA)        │ 365 dias│ 31536000│ URL Normalize        │    │
-│  │ /* (default)          │ S3 (SPA)        │ 1 hora  │ 3600   │ A/B, Geo-Redirect    │    │
-│  └──────────────────────────────────────────────────────────────────────────────────────┘    │
-│                                                                                              │
-│  ORIGIN GROUPS (Failover):                                                                   │
-│  ┌────────────────────────────────────────────────────────────────────────────────────────┐  │
-│  │ API Origin Group:    Primary → ALB sa-east-1  │  Secondary → ALB us-east-1           │  │
-│  │ Media Origin Group:  Primary → S3 sa-east-1   │  Secondary → S3 us-east-1 (replica)  │  │
-│  └────────────────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                              │
-└──────────────┬───────────────────┬──────────────────────┬──────────────────┬─────────────────┘
-               │                   │                      │                  │
-               ▼                   ▼                      ▼                  ▼
-    ┌──────────────────┐ ┌──────────────────┐  ┌──────────────────┐ ┌──────────────────┐
-    │   S3 Bucket      │ │   ALB + ECS      │  │   S3 Bucket      │ │   ALB            │
-    │   (SPA/Frontend) │ │   (API Backend)  │  │   (Media Assets) │ │   (WebSocket)    │
-    │                  │ │                  │  │                  │ │                  │
-    │ - React SPA      │ │ - 3 services     │  │ - Product images │ │ - Notifications  │
-    │ - index.html     │ │ - Auto Scaling   │  │ - Videos         │ │ - Live cart      │
-    │ - assets/        │ │ - 4 vCPU/8GB     │  │ - Thumbnails     │ │ - Price updates  │
-    │                  │ │ - min: 10        │  │ - CDN optimized  │ │                  │
-    │ OAC enabled      │ │ - max: 200       │  │ - OAC enabled    │ │ Sticky sessions  │
-    └──────────────────┘ └──────────────────┘  └──────────────────┘ └──────────────────┘
-                                  │
-                                  ▼
-                       ┌──────────────────┐
-                       │   CloudWatch     │
-                       │                  │
-                       │ - Dashboard RT   │
-                       │ - Alarmes        │
-                       │ - Logs (sampled) │
-                       │ - Métricas       │
-                       └──────────────────┘
-```
+
+**Behaviors configurados:**
+
+| Path Pattern | Origin | Cache | TTL | Funções |
+|---|---|---|---|---|
+| `/api/v1/config` | ALB (API) | 60s | 60s | JWT Auth |
+| `/api/*` | ALB (API) | Disabled | 0 | JWT Auth |
+| `/ws/*` | ALB (WebSocket) | Disabled | 0 | — |
+| `/media/*` | S3 (Media) | 30 dias | 2592000 | — |
+| `/static/*` | S3 (SPA) | 365 dias | 31536000 | URL Normalize |
+| `/* (default)` | S3 (SPA) | 1 hora | 3600 | A/B, Geo-Redirect |
+
+**Origin Groups (Failover):**
+
+| Group | Primary | Secondary |
+|---|---|---|
+| API | ALB sa-east-1 | ALB us-east-1 |
+| Media | S3 sa-east-1 | S3 us-east-1 (replica) |
 
 ### Passo a Passo — Implementação Completa
 

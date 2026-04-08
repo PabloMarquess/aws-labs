@@ -8,19 +8,24 @@
 
 ## Mapa do Modulo
 
-```
-                    ┌─────────────────────────────────┐
-                    │   Modulo 08 — Multi-tenant/SaaS  │
-                    └───────────────┬─────────────────┘
-                                    │
-        ┌───────────┬───────────┬───┴───┬───────────┬───────────┐
-        │           │           │       │           │           │
-   ┌────┴────┐ ┌────┴────┐ ┌───┴───┐ ┌─┴─────┐ ┌──┴───┐ ┌────┴────┐
-   │Multi-   │ │SaaS     │ │Cont.  │ │Static │ │Web   │ │HTTP/2   │
-   │tenant   │ │Archit.  │ │Deploy │ │IPs    │ │Socket│ │HTTP/3   │
-   │Distrib. │ │CF+L@E   │ │B/G    │ │       │ │      │ │QUIC     │
-   └─────────┘ └─────────┘ └───────┘ └───────┘ └──────┘ └─────────┘
-     D.45        D.46        D.47      D.48      D.49      D.50
+```mermaid
+graph TB
+    MOD[Modulo 08<br/>Multi-tenant / SaaS]
+
+    MOD --> D45[D.45 Multi-tenant<br/>Distribution Tenants]
+    MOD --> D46[D.46 SaaS Architecture<br/>CF + Lambda@Edge]
+    MOD --> D47[D.47 Continuous Deploy<br/>Blue/Green + Canary]
+    MOD --> D48[D.48 Static IPs<br/>Firewall Whitelisting]
+    MOD --> D49[D.49 WebSocket<br/>via CloudFront]
+    MOD --> D50[D.50 HTTP/2 + HTTP/3<br/>QUIC Protocol]
+
+    style MOD fill:#0f3460,color:#fff
+    style D45 fill:#533483,color:#fff
+    style D46 fill:#533483,color:#fff
+    style D47 fill:#e94560,color:#fff
+    style D48 fill:#16213e,color:#fff
+    style D49 fill:#16213e,color:#fff
+    style D50 fill:#16213e,color:#fff
 ```
 
 ---
@@ -46,34 +51,26 @@ Distribution Tenants resolvem isso: **uma distribution pai** com ate **5.000 ten
 
 ### Arquitetura
 
+```mermaid
+graph TB
+    TA[Tenant A<br/>app-a.example.com<br/>Cert: *.example.com<br/>WAF: WebACL-A]
+    TB[Tenant B<br/>app-b.client.com<br/>Cert: client.com<br/>Geo: Block RU,CN]
+    TC[Tenant C<br/>custom.empresa.br<br/>Cert: empresa.br<br/>Geo: Allow BR only]
+
+    TA --> CF
+    TB --> CF
+    TC --> CF
+
+    CF[CloudFront Distribution - Pai<br/>Behaviors + Cache Policy<br/>Shared Config]
+
+    CF --> S3[S3 Origin]
+    CF --> ALB[ALB Origin]
+
+    style TA fill:#e94560,color:#fff
+    style TB fill:#533483,color:#fff
+    style TC fill:#16213e,color:#fff
+    style CF fill:#0f3460,color:#fff
 ```
-                          Tenant A                Tenant B                Tenant C
-                     app-a.example.com       app-b.client.com        custom.empresa.br
-                     Cert: *.example.com     Cert: client.com        Cert: empresa.br
-                     WAF: WebACL-A           WAF: WebACL-B           WAF: (nenhum)
-                     Geo: Allow ALL          Geo: Block RU,CN        Geo: Allow BR only
-                            │                       │                       │
-                            └───────────┬───────────┘───────────────────────┘
-                                        │
-                                        ▼
-                              ┌─────────────────────┐
-                              │  CloudFront          │
-                              │  Distribution (Pai)  │
-                              │                      │
-                              │  Behaviors:          │
-                              │   /* → S3 Origin     │
-                              │   /api/* → ALB       │
-                              │                      │
-                              │  Cache Policy:       │
-                              │   CachingOptimized   │
-                              └──────────┬──────────┘
-                                         │
-                              ┌──────────┴──────────┐
-                              │                     │
-                         ┌────┴────┐          ┌─────┴────┐
-                         │   S3    │          │   ALB    │
-                         │ Bucket  │          │  Origin  │
-                         └─────────┘          └──────────┘
 ```
 
 ### Conceitos Fundamentais

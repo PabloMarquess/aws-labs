@@ -8,19 +8,22 @@
 
 ## Mapa do Módulo
 
-```
-                    ┌──────────────────────────────────┐
-                    │  Módulo 09 — Performance/Savings  │
-                    └───────────────┬──────────────────┘
-                                    │
-        ┌───────────┬───────────┬───┴───┬───────────┐
-        │           │           │       │           │
-   ┌────┴────┐ ┌────┴────┐ ┌───┴───┐ ┌─┴─────┐ ┌──┴──────┐
-   │Savings  │ │Pricing  │ │RAM    │ │Perf.  │ │Day-2    │
-   │Bundle   │ │Deep     │ │Sharing│ │Tuning │ │Ops &    │
-   │         │ │Dive     │ │       │ │Expert │ │Runbooks │
-   └─────────┘ └─────────┘ └───────┘ └───────┘ └─────────┘
-     D.51        D.52        D.53      D.54       D.55
+```mermaid
+graph TB
+    MOD[Módulo 09<br/>Performance / Savings / Ops]
+
+    MOD --> D51[D.51 Savings Bundle<br/>Compromisso + Economia]
+    MOD --> D52[D.52 Pricing Deep Dive<br/>11 Componentes de Custo]
+    MOD --> D53[D.53 AWS RAM<br/>Compartilhamento Cross-Account]
+    MOD --> D54[D.54 Performance Tuning<br/>8 Técnicas, 95%+ HR]
+    MOD --> D55[D.55 Day-2 Ops<br/>Runbooks + Automação]
+
+    style MOD fill:#0f3460,color:#fff
+    style D51 fill:#16213e,color:#fff
+    style D52 fill:#16213e,color:#fff
+    style D53 fill:#533483,color:#fff
+    style D54 fill:#e94560,color:#fff
+    style D55 fill:#533483,color:#fff
 ```
 
 ---

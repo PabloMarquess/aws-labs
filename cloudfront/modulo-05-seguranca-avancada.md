@@ -9,42 +9,40 @@
 
 ## Mapa de Segurança do CloudFront
 
-```
-                              CAMADAS DE SEGURANÇA
-                              ═══════════════════
+```mermaid
+graph TB
+    subgraph L7 ["Layer 7 — Aplicação"]
+        WAF[WAF<br/>SQLi, XSS, Bots, Rate Limit<br/>D.25]
+        SIGNED[Signed URLs / Cookies<br/>Canned + Custom Policy<br/>D.23-24]
+        FLE[Field-Level Encryption<br/>Criptografia no edge<br/>D.28]
+        MTLS[mTLS<br/>Client certificate<br/>D.30]
+        HEADERS[Response Headers<br/>CSP, HSTS, X-Frame<br/>Mod.03]
+    end
 
-Layer 7 (Aplicação)
-├── WAF (Web Application Firewall) ───────── Desafio 25
-│   ├── Managed Rules (SQLi, XSS, Bad Bots)
-│   ├── Rate Limiting
-│   ├── IP Sets (whitelist/blacklist)
-│   ├── Geo Blocking
-│   └── Custom Rules (regex, headers)
-│
-├── Signed URLs / Signed Cookies ─────────── Desafios 23, 24
-│   ├── Canned Policy (simples)
-│   └── Custom Policy (IP, date range)
-│
-├── Field-Level Encryption ───────────────── Desafio 28
-│   └── Criptografia de campos específicos no edge
-│
-├── mTLS (Mutual TLS) ───────────────────── Desafio 30
-│   └── Certificado do cliente obrigatório
-│
-└── Response Headers (CSP, HSTS, etc) ──── (Módulo 03)
+    subgraph L34 ["Layer 3/4 — Rede/Transporte"]
+        SHIELD[Shield Standard + Advanced<br/>DDoS protection<br/>D.26]
+        TLS[TLS 1.2/1.3<br/>Mod.01]
+        GEO[Geo Restriction<br/>D.27]
+    end
 
-Layer 3/4 (Rede/Transporte)
-├── AWS Shield Standard (automático) ─────── Desafio 26
-├── AWS Shield Advanced (premium) ────────── Desafio 26
-├── TLS 1.2/1.3 ──────────────────────────── (Módulo 01)
-└── Geo Restriction ──────────────────────── Desafio 27
+    subgraph ORIGIN ["Acesso à Origin"]
+        OAC[OAC / OAI<br/>D.29]
+        VPC[VPC Origins<br/>Mod.02]
+        TRUST[Trust Stores<br/>D.30]
+    end
 
-Acesso à Origin
-├── OAC (Origin Access Control) ──────────── Desafio 29
-├── OAI (Origin Access Identity) legacy ──── Desafio 29
-├── VPC Origins (PrivateLink) ────────────── (Módulo 02)
-├── Custom Headers secretos ──────────────── (Módulo 02)
-└── Trust Stores ─────────────────────────── Desafio 30
+    INTERNET[Internet] --> L7
+    L7 --> L34
+    L34 --> CF[CloudFront Edge]
+    CF --> ORIGIN
+    ORIGIN --> S3[Origin<br/>S3 / ALB / EC2]
+
+    style INTERNET fill:#e94560,color:#fff
+    style CF fill:#0f3460,color:#fff
+    style S3 fill:#533483,color:#fff
+    style WAF fill:#16213e,color:#fff
+    style SHIELD fill:#16213e,color:#fff
+    style OAC fill:#16213e,color:#fff
 ```
 
 ---
@@ -64,27 +62,28 @@ Plataformas de cursos online (Udemy, Coursera), sites de streaming, e portais de
 
 ### Arquitetura
 
-```
-┌──────────┐    1. Login/Pagamento     ┌──────────┐
-│  Viewer  │ ────────────────────────→ │ Backend  │
-│ (Browser)│                           │ (API)    │
-└────┬─────┘                           └────┬─────┘
-     │                                      │
-     │  2. Gera Signed URL                  │
-     │     com private key                  │
-     │  ←───────────────────────────────────┘
-     │
-     │  3. Acessa: https://cdn.site.com/video.mp4
-     │     ?Expires=1234567890
-     │     &Signature=abc...
-     │     &Key-Pair-Id=K1ABC
-     │
-     ▼
-┌──────────────┐   4. Valida assinatura    ┌──────────┐
-│  CloudFront  │ ──────────────────────→   │    S3    │
-│  (Edge)      │   5. Se válida, busca     │ (Origin) │
-│              │ ←─────────────────────    │          │
-└──────────────┘   6. Retorna conteúdo     └──────────┘
+```mermaid
+sequenceDiagram
+    participant V as Viewer (Browser)
+    participant B as Backend (API)
+    participant CF as CloudFront (Edge)
+    participant S3 as S3 (Origin)
+
+    V->>B: 1. Login / Pagamento
+    B->>B: 2. Gera Signed URL com private key
+    B-->>V: Signed URL
+
+    Note over V: URL: cdn.site.com/video.mp4<br/>?Expires=1234567890<br/>&Signature=abc...<br/>&Key-Pair-Id=K1ABC
+
+    V->>CF: 3. Acessa Signed URL
+    CF->>CF: 4. Valida assinatura + expiração
+    alt Assinatura válida
+        CF->>S3: 5. Busca conteúdo
+        S3-->>CF: Conteúdo
+        CF-->>V: 6. 200 OK + vídeo
+    else Inválida ou expirada
+        CF-->>V: 403 Forbidden
+    end
 ```
 
 ### Pré-requisitos
@@ -708,18 +707,30 @@ Todo site em produção precisa de WAF. Sem ele, você está vulnerável a SQL i
 
 ### Arquitetura
 
-```
-Internet → CloudFront → WAF Web ACL → Origin
-                          │
-              ┌───────────┼───────────┐
-              │           │           │
-          Managed     Rate-Based   Custom
-          Rules       Rules        Rules
-              │           │           │
-         ┌────┤      ┌────┤      ┌────┤
-         │    │      │    │      │    │
-        SQLi  XSS   IP   Geo   Regex Header
-        Rules Rules  Block Block Match Match
+```mermaid
+graph LR
+    I[Internet] --> CF[CloudFront]
+    CF --> WAF[WAF Web ACL]
+    WAF --> O[Origin]
+
+    WAF --> MR[Managed Rules]
+    WAF --> RB[Rate-Based Rules]
+    WAF --> CR[Custom Rules]
+
+    MR --> SQLI[SQLi Rules]
+    MR --> XSS[XSS Rules]
+    MR --> BAD[Known Bad Inputs]
+
+    RB --> IP[IP Rate Limit]
+    RB --> GEO[Geo Block]
+
+    CR --> REGEX[Regex Match]
+    CR --> HEADER[Header Match]
+
+    style WAF fill:#e94560,color:#fff
+    style MR fill:#0f3460,color:#fff
+    style RB fill:#533483,color:#fff
+    style CR fill:#16213e,color:#fff
 ```
 
 ### Passo a Passo
