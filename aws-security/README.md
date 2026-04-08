@@ -442,6 +442,9 @@ Inspirado no formato dos **AWS Workshops (Advanced 300/400)**, cada desafio incl
 - [Mdulo 09 — Security Operations](modulo-09-secops.md) (Desafios 56-62)
 - [Mdulo 10 — Cenrios Expert](modulo-10-cenarios-expert.md) (Desafios 63-70)
 
+### Extra — Event-Aligned
+- [Mdulo Extra — Permissions, Governance & AI Controls](modulo-extra-permissions-governance-ai.md) (Desafios E.1-E.6)
+
 ---
 
 ## Referncias

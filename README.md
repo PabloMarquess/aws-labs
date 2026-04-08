@@ -48,12 +48,13 @@ Workshop cobrindo todo o ecossistema de segurança da AWS — IAM, GuardDuty, Cl
 | 02 | [Detection e Monitoring](aws-security/modulo-02-detection-monitoring.md) | 8-14 | 100-200 | Completo |
 | 03 | [Infrastructure Protection](aws-security/modulo-03-infrastructure-protection.md) | 15-21 | 200 | Completo |
 | 04 | [Data Protection](aws-security/modulo-04-data-protection.md) | 22-28 | 200-300 | Completo |
-| 05 | Incident Response | 29-35 | 300 | Pendente |
-| 06 | Compliance e Governance | 36-42 | 300 | Pendente |
-| 07 | Network Security | 43-49 | 300 | Pendente |
-| 08 | Application Security | 50-55 | 400 | Pendente |
-| 09 | Security Operations | 56-62 | 400 | Pendente |
-| 10 | Cenários Expert | 63-70 | 400 | Pendente |
+| 05 | [Incident Response](aws-security/modulo-05-incident-response.md) | 29-35 | 300 | Completo |
+| 06 | [Compliance e Governance](aws-security/modulo-06-compliance-governance.md) | 36-42 | 300 | Completo |
+| 07 | [Network Security](aws-security/modulo-07-network-security.md) | 43-49 | 300 | Completo |
+| 08 | [Application Security](aws-security/modulo-08-application-security.md) | 50-55 | 400 | Completo |
+| 09 | [Security Operations](aws-security/modulo-09-secops.md) | 56-62 | 400 | Completo |
+| 10 | [Cenários Expert](aws-security/modulo-10-cenarios-expert.md) | 63-70 | 400 | Completo |
+| Extra | [Permissions, Governance & AI Controls](aws-security/modulo-extra-permissions-governance-ai.md) | E.1-E.6 | 200-300 | Completo |
 
 ---
 
