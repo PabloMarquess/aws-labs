@@ -1,0 +1,78 @@
+# Claude Code — local/machine-specific
+.claude/settings.local.json
+CLAUDE.local.md
+.claude/CLAUDE.local.md
+**/CLAUDE.local.md
+.claude/memory/
+
+# AI/LLM tool artifacts
+.aider*
+.continue/
+.cursor/
+.copilot/
+.github/copilot
+.codeium/
+.tabnine/
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+*.code-workspace
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.tfvars
+!example.tfvars
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+
+# AWS credentials
+.aws/credentials
+.aws/config
+*.pem
+*.key
+!*.key.pub
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Temp
+/tmp/
+*.zip
+*.tar.gz
+
+# Claude Code project config (local)
+.claude/
