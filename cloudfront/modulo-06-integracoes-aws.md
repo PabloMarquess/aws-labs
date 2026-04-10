@@ -1174,4 +1174,521 @@ Networking:
   VPC Origins ─────────── Origins privadas
 ```
 
+---
+
+## Desafio Bônus: Cenários Reais — Migração de App para CloudFront e Troubleshooting de 502
+
+> **Level:** 300 | **Tempo:** 120 min | **Custo:** ~$2
+
+### Objetivo
+
+Dois cenários baseados em situações reais de produção: (1) migrar uma aplicação que hoje usa apenas ALB para CloudFront, identificando armadilhas comuns; (2) diagnosticar e resolver um erro 502 causado por misconfiguration de Origin Request Policy.
+
+---
+
+### Cenário 1: Migrar Aplicação ALB → CloudFront (Redução de Custos)
+
+#### Contexto
+
+Uma empresa SaaS tem uma aplicação web (ECS + ALB) que serve ~5 TB/mês de Data Transfer Out direto pelo ALB. O time de infra propõe colocar CloudFront na frente para reduzir custos de DTO e melhorar performance.
+
+A conversa interna vai mais ou menos assim:
+
+> "Poderíamos ter um CF para o ALB das aplicações? Redução de custos com data-transfer-out, pois não usamos cache nas aplicações."
+>
+> "Dá pra fazer, mas tem que validar certinho. Pode ter cache onde não deveria, rotas específicas com comportamento dinâmico... E o CF não faz cache de request, só de response. O ideal é cachear imagens, JS, CSS — coisas estáticas."
+
+#### O Que Realmente Economiza
+
+```mermaid
+graph TB
+    subgraph Antes ["Antes: ALB Direto"]
+        USER1[Usuários] -->|5 TB/mês DTO| ALB1[ALB<br/>~$0.09/GB DTO<br/>= ~$450/mês]
+    end
+
+    subgraph Depois ["Depois: CloudFront + ALB"]
+        USER2[Usuários] -->|5 TB/mês| CF2[CloudFront<br/>~$0.085/GB DTO<br/>Cache Hit 70%+]
+        CF2 -->|1.5 TB/mês<br/>cache miss only| ALB2[ALB<br/>DTO interno: $0]
+    end
+
+    style ALB1 fill:#e94560,color:#fff
+    style CF2 fill:#0f3460,color:#fff
+    style ALB2 fill:#16213e,color:#fff
+```
+
+```
+Cálculo de economia:
+├── Antes: 5 TB × $0.09/GB = $450/mês (ALB DTO para internet)
+├── Depois: 5 TB × $0.085/GB = $425/mês (CF DTO, preço similar)
+│   MAS: com cache hit ratio de 70% para assets estáticos:
+│   ├── 3.5 TB servido do cache (sem buscar no ALB)
+│   ├── 1.5 TB de cache miss (busca no ALB, DTO interno = $0)
+│   └── DTO efetivo: 5 TB × $0.085 = $425 (mas origin transfer = $0)
+├── Economia adicional:
+│   ├── Compressão Brotli: reduz ~60% do tamanho de JS/CSS/HTML
+│   ├── Menos requests ao ALB = menor custo de ALB ($0.008/10K LCU-hour)
+│   └── Latência menor para usuários (edge cache)
+└── Economia estimada: 20-40% dependendo do cache hit ratio
+```
+
+#### Arquitetura Proposta
+
+```mermaid
+graph TB
+    U[Usuários] --> CF[CloudFront]
+
+    CF -->|"/*.js, /*.css, /fonts/*<br/>Cache: 1 ano (immutable)"| S[Mesmo ALB<br/>ou S3 para assets]
+    CF -->|"/images/*, /media/*<br/>Cache: 30 dias"| S
+    CF -->|"/api/*<br/>Cache: DISABLED"| ALB[ALB + ECS<br/>API dinâmica]
+    CF -->|"Default (*)<br/>Cache: 5 min<br/>stale-while-revalidate"| ALB
+
+    style CF fill:#0f3460,color:#fff
+    style ALB fill:#533483,color:#fff
+```
+
+#### Passo a Passo: Migração Segura
+
+```
+FASE 1: Inventário (1 dia)
+├── Listar TODOS os paths da aplicação
+├── Classificar: estático vs dinâmico
+├── Identificar rotas com cookies/auth (não cachear)
+├── Identificar rotas com upload (POST/PUT)
+├── Medir DTO atual por tipo de conteúdo
+└── Definir behaviors necessários
+
+FASE 2: Configurar CloudFront (1 dia)
+├── Criar distribution com ALB como origin
+├── Origin Request Policy: DEVE incluir Host header
+│   (sem Host, o ALB não sabe para qual app rotear!)
+├── Behaviors por tipo de conteúdo:
+│   ├── /api/*         → CachingDisabled + AllViewer ORP
+│   ├── /admin/*       → CachingDisabled + AllViewer ORP
+│   ├── *.js, *.css    → CachingOptimized + Host ORP
+│   ├── /images/*      → CachingOptimized + Host ORP
+│   └── Default (*)    → Cache 5min + WordPressDynamic ORP
+├── Response Headers Policy: security headers
+├── WAF: associar Web ACL
+└── NÃO apontar DNS ainda
+
+FASE 3: Testar via domínio CF (2-3 dias)
+├── Acessar via d1234.cloudfront.net
+├── Testar CADA rota: login, dashboard, API, uploads
+├── Verificar: cookies passam? auth funciona?
+├── Verificar: formulários POST funcionam?
+├── Verificar: websocket funciona? (se aplicável)
+├── Verificar: cache hit ratio nos assets
+├── Verificar: headers de segurança presentes
+└── Corrigir: behaviors e policies conforme necessário
+
+FASE 4: Cutover DNS (1 hora)
+├── Criar CNAME/Alias apontando para CloudFront
+├── TTL baixo no DNS (300s) antes do cutover
+├── Monitorar: 5xx errors, latência, cache hit ratio
+├── Rollback plan: reverter DNS em 5 min se necessário
+└── Após 24h estável: aumentar TTL do DNS
+
+FASE 5: Otimizar (ongoing)
+├── Analisar Standard Logs com Athena
+├── Identificar paths com cache miss que poderiam cachear
+├── Ajustar TTLs baseado em dados reais
+├── Habilitar Origin Shield se origin em região específica
+└── Considerar Savings Bundle se DTO > $100/mês
+```
+
+#### Armadilhas Comuns (e como evitar)
+
+| Armadilha | O Que Acontece | Como Evitar |
+|-----------|---------------|-------------|
+| **Cache em rotas de API** | Usuário A vê dados do usuário B | `CachingDisabled` para `/api/*` |
+| **Cache em páginas com auth** | Dashboard cacheado sem login | Excluir rotas autenticadas do cache |
+| **POST/PUT bloqueado** | Formulários param de funcionar | `AllowedMethods: ALL` nos behaviors dinâmicos |
+| **Cookies não passam** | Login quebra | Origin Request Policy com cookies (whitelist) |
+| **Host header não enviado** | ALB retorna 502 (não sabe qual app) | ORP com Host header obrigatório |
+| **WebSocket não funciona** | Conexão cai | Behavior separado para `/ws/*` com CachingDisabled |
+| **Upload de arquivos falha** | POST com body grande rejeitado | Verificar max body size no WAF |
+| **Cache de erros** | 502 temporário fica cacheado por horas | Error Caching Min TTL = 0 ou 10 |
+
+#### Terraform — Migração Completa
+
+```hcl
+# Origin Request Policy customizada (OBRIGATÓRIA para ALB)
+resource "aws_cloudfront_origin_request_policy" "alb_dynamic" {
+  name    = "ALB-Dynamic-WithHost"
+  comment = "Forwards Host + essential headers to ALB"
+
+  headers_config {
+    header_behavior = "whitelist"
+    headers {
+      items = [
+        "Host",
+        "CloudFront-Forwarded-Proto",
+        "CloudFront-Is-Mobile-Viewer",
+        "CloudFront-Is-Desktop-Viewer",
+        "Origin",
+        "Access-Control-Request-Method",
+        "Access-Control-Request-Headers"
+      ]
+    }
+  }
+
+  cookies_config {
+    cookie_behavior = "whitelist"
+    cookies {
+      items = ["session_id", "auth_token", "csrf_token"]
+    }
+  }
+
+  query_strings_config {
+    query_string_behavior = "all"
+  }
+}
+
+# Origin Request Policy para assets (Host mas sem cookies)
+resource "aws_cloudfront_origin_request_policy" "alb_static" {
+  name    = "ALB-Static-HostOnly"
+  comment = "Forwards Host only - for static assets"
+
+  headers_config {
+    header_behavior = "whitelist"
+    headers {
+      items = ["Host"]
+    }
+  }
+
+  cookies_config {
+    cookie_behavior = "none"
+  }
+
+  query_strings_config {
+    query_string_behavior = "none"
+  }
+}
+
+# Cache Policy para assets estáticos
+resource "aws_cloudfront_cache_policy" "static_assets" {
+  name        = "Static-Assets-Long-Cache"
+  default_ttl = 604800    # 7 dias
+  max_ttl     = 31536000  # 1 ano
+  min_ttl     = 86400     # 1 dia
+
+  parameters_in_cache_key_and_forwarded_to_origin {
+    enable_accept_encoding_brotli = true
+    enable_accept_encoding_gzip   = true
+    headers_config { header_behavior = "none" }
+    cookies_config { cookie_behavior = "none" }
+    query_strings_config {
+      query_string_behavior = "whitelist"
+      query_strings { items = ["v", "ver", "hash"] }
+    }
+  }
+}
+
+# Distribution
+resource "aws_cloudfront_distribution" "app" {
+  comment             = "App migration - ALB to CloudFront"
+  enabled             = true
+  default_root_object = ""
+  price_class         = "PriceClass_200"
+  http_version        = "http2and3"
+  aliases             = ["app.empresa.com"]
+
+  # Origin: ALB
+  origin {
+    domain_name = aws_lb.app.dns_name
+    origin_id   = "alb-app"
+
+    custom_origin_config {
+      http_port              = 80
+      https_port             = 443
+      origin_protocol_policy = "https-only"
+      origin_ssl_protocols   = ["TLSv1.2"]
+      origin_keepalive_timeout = 60
+      origin_read_timeout      = 30
+    }
+
+    # Custom header para origin protection
+    custom_header {
+      name  = "X-CF-Verify"
+      value = var.cf_origin_secret  # Do Secrets Manager
+    }
+  }
+
+  # ╔══════════════════════════════════════════════════════╗
+  # ║  BEHAVIORS — ORDEM IMPORTA!                          ║
+  # ║  Mais específico primeiro → genérico depois          ║
+  # ╚══════════════════════════════════════════════════════╝
+
+  # Behavior 1: API (ZERO cache, passa tudo)
+  ordered_cache_behavior {
+    path_pattern     = "/api/*"
+    target_origin_id = "alb-app"
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods   = ["GET", "HEAD"]
+
+    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"  # CachingDisabled
+    origin_request_policy_id = aws_cloudfront_origin_request_policy.alb_dynamic.id
+
+    viewer_protocol_policy = "redirect-to-https"
+    compress               = true
+  }
+
+  # Behavior 2: Admin (ZERO cache)
+  ordered_cache_behavior {
+    path_pattern     = "/admin/*"
+    target_origin_id = "alb-app"
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods   = ["GET", "HEAD"]
+
+    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
+    origin_request_policy_id = aws_cloudfront_origin_request_policy.alb_dynamic.id
+
+    viewer_protocol_policy = "redirect-to-https"
+  }
+
+  # Behavior 3: Assets JS/CSS (cache agressivo)
+  ordered_cache_behavior {
+    path_pattern     = "/static/*"
+    target_origin_id = "alb-app"
+    allowed_methods  = ["GET", "HEAD"]
+    cached_methods   = ["GET", "HEAD"]
+
+    cache_policy_id          = aws_cloudfront_cache_policy.static_assets.id
+    origin_request_policy_id = aws_cloudfront_origin_request_policy.alb_static.id
+
+    viewer_protocol_policy = "redirect-to-https"
+    compress               = true
+  }
+
+  # Behavior 4: Imagens (cache longo)
+  ordered_cache_behavior {
+    path_pattern     = "/images/*"
+    target_origin_id = "alb-app"
+    allowed_methods  = ["GET", "HEAD"]
+    cached_methods   = ["GET", "HEAD"]
+
+    cache_policy_id          = aws_cloudfront_cache_policy.static_assets.id
+    origin_request_policy_id = aws_cloudfront_origin_request_policy.alb_static.id
+
+    viewer_protocol_policy = "redirect-to-https"
+    compress               = true
+  }
+
+  # Default: Páginas HTML (cache curto)
+  default_cache_behavior {
+    target_origin_id = "alb-app"
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods   = ["GET", "HEAD"]
+
+    cache_policy_id          = "658327ea-f89d-4fab-a63d-7e88639e58f6"  # CachingOptimized
+    origin_request_policy_id = aws_cloudfront_origin_request_policy.alb_dynamic.id
+
+    viewer_protocol_policy = "redirect-to-https"
+    compress               = true
+  }
+
+  # Error pages — NÃO cachear erros por muito tempo
+  custom_error_response {
+    error_code            = 502
+    error_caching_min_ttl = 10  # Apenas 10 segundos (não horas!)
+  }
+
+  custom_error_response {
+    error_code            = 503
+    error_caching_min_ttl = 10
+  }
+
+  custom_error_response {
+    error_code            = 504
+    error_caching_min_ttl = 10
+  }
+
+  restrictions {
+    geo_restriction { restriction_type = "none" }
+  }
+
+  viewer_certificate {
+    acm_certificate_arn      = aws_acm_certificate.app.arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
+  }
+}
+```
+
+---
+
+### Cenário 2: Troubleshooting 502 — Origin Request Policy Sem Host Header
+
+#### Contexto
+
+Uma empresa tem um site WordPress rodando em ECS + ALB + CloudFront. O ALB serve múltiplas aplicações (site principal, blog, sistema de carreiras) usando regras baseadas no Host header. Tudo funciona perfeitamente no ambiente de staging, mas de repente em produção os arquivos `.js` começam a retornar **502 Bad Gateway**.
+
+```
+502 Bad Gateway ERROR
+The request could not be satisfied.
+Generated by cloudfront (CloudFront) HTTP3 Server
+Request ID: XsCxC11M0MSgrozIGuWEioj0MqYN6iE0rBqg0Ye3wT9H7FbHyY4e7w==
+```
+
+#### O Que Aconteceu
+
+```mermaid
+sequenceDiagram
+    participant U as Usuário
+    participant CF as CloudFront
+    participant ALB as ALB<br/>(múltiplos virtual hosts)
+    participant NGINX as Nginx Container
+
+    U->>CF: GET /js/app.js
+    Note over CF: Behavior: CachingOptimized<br/>Origin Request Policy: NENHUMA
+
+    CF->>ALB: GET /js/app.js<br/>Host: alb-prod-123.us-east-1.elb.amazonaws.com
+    Note over ALB: Host header = domínio do ALB!<br/>Não é "meusite.com"
+
+    ALB->>NGINX: Forward (Host: alb-prod-123...)
+    Note over NGINX: Virtual host não reconhecido!<br/>Não sabe para qual app rotear
+    NGINX-->>ALB: 502 Bad Gateway
+    ALB-->>CF: 502
+    CF-->>U: 502 Bad Gateway ERROR
+
+    Note over CF: CloudFront CACHEIA o 502<br/>por Error Caching Min TTL<br/>(padrão: 10 segundos)
+```
+
+#### Causa Raiz
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  CAUSA RAIZ: Origin Request Policy ausente no behavior           │
+│                                                                   │
+│  O behavior para *.js usava:                                     │
+│  ├── Cache Policy: CachingOptimized ✅                           │
+│  ├── Origin Request Policy: NENHUMA ❌ ← PROBLEMA                │
+│  └── Resultado: Host header NÃO é enviado ao ALB                │
+│                                                                   │
+│  Sem o Host header correto:                                      │
+│  ├── ALB recebe: Host: alb-prod-123.us-east-1.elb.amazonaws.com │
+│  ├── Nginx procura virtual host para esse domínio                │
+│  ├── Não encontra → default server → 502 ou página errada       │
+│  └── CloudFront retorna 502 ao usuário                           │
+│                                                                   │
+│  Por que funcionava em staging?                                  │
+│  ├── Staging tinha Origin Request Policy com Host ✅             │
+│  ├── Ou staging tem apenas 1 app no ALB (não precisa de Host)   │
+│  └── Prod tem múltiplos virtual hosts → Host é obrigatório      │
+│                                                                   │
+│  Por que parou de funcionar "do nada"?                           │
+│  ├── Alguém criou o behavior *.js sem ORP (esqueceu)            │
+│  ├── Ou copiou de um template que não incluía ORP               │
+│  └── CloudTrail mostra: quem fez a alteração e quando           │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+#### Investigação Passo a Passo
+
+```bash
+# 1. Confirmar que o ALB responde corretamente quando Host é enviado
+curl -sk -H "Host: meusite.com" \
+  "https://alb-prod-123.us-east-1.elb.amazonaws.com/js/app.js" | head -1
+# Retorna o JS corretamente → ALB está OK, problema é no CF
+
+# 2. Verificar behaviors e suas Origin Request Policies
+aws cloudfront get-distribution-config --id E1EXAMPLE \
+  --query 'DistributionConfig.CacheBehaviors.Items[*].{
+    path:PathPattern,
+    cachePolicy:CachePolicyId,
+    originRequestPolicy:OriginRequestPolicyId
+  }' --output table
+
+# Resultado: behavior *.js tem originRequestPolicy: null ← BUG!
+
+# 3. Verificar no CloudTrail quem alterou
+aws cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=UpdateDistribution \
+  --start-time "$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)" \
+  --query 'Events[*].{time:EventTime,user:Username}' --output table
+
+# 4. Ver o que mudou (comparar behaviors antes e depois)
+# O CloudTrail event contém requestParameters com a config completa
+```
+
+#### Fix: Adicionar Origin Request Policy com Host
+
+```bash
+# Criar ORP que inclui Host header
+ORP_ID=$(aws cloudfront create-origin-request-policy \
+  --origin-request-policy-config '{
+    "Name": "Forward-Host-Header",
+    "Comment": "Envia Host header para ALBs com virtual hosts",
+    "HeadersConfig": {
+      "HeaderBehavior": "whitelist",
+      "Headers": {"Quantity": 1, "Items": ["Host"]}
+    },
+    "CookiesConfig": {"CookieBehavior": "none"},
+    "QueryStringsConfig": {"QueryStringBehavior": "none"}
+  }' \
+  --query 'OriginRequestPolicy.Id' --output text)
+
+echo "ORP ID: $ORP_ID"
+
+# Atualizar o behavior *.js para incluir a ORP
+# (via console ou update-distribution com o novo ORP_ID)
+```
+
+```hcl
+# Terraform fix
+resource "aws_cloudfront_origin_request_policy" "forward_host" {
+  name    = "Forward-Host-Header"
+  comment = "Envia Host header para ALBs com virtual hosts"
+
+  headers_config {
+    header_behavior = "whitelist"
+    headers { items = ["Host"] }
+  }
+  cookies_config { cookie_behavior = "none" }
+  query_strings_config { query_string_behavior = "none" }
+}
+
+# Adicionar ao behavior
+ordered_cache_behavior {
+  path_pattern     = "*.js"
+  target_origin_id = "alb-prod"
+
+  cache_policy_id          = "658327ea-f89d-4fab-a63d-7e88639e58f6"  # CachingOptimized
+  origin_request_policy_id = aws_cloudfront_origin_request_policy.forward_host.id  # FIX!
+
+  # ...
+}
+```
+
+#### Lição Aprendida: Checklist de Behavior
+
+Antes de criar ou modificar qualquer behavior em CloudFront que aponta para um ALB:
+
+```
+□ Origin Request Policy definida? (nunca deixar null para ALBs)
+□ Host header incluído na ORP? (obrigatório se ALB tem virtual hosts)
+□ Cache Policy faz sentido para esse tipo de conteúdo?
+□ AllowedMethods inclui POST/PUT se necessário?
+□ Testar com curl enviando Host correto
+□ Verificar no CloudTrail quem e quando alterou (se troubleshooting)
+□ Error Caching Min TTL baixo para 5xx (10s, não horas)
+```
+
+### O Que Aprendemos (Ambos os Cenários)
+
+| Conceito | Detalhe |
+|----------|---------|
+| **Host header é obrigatório** | ALBs com múltiplos virtual hosts precisam do Host para rotear |
+| **ORP null ≠ seguro** | Sem ORP, CloudFront não envia headers essenciais ao origin |
+| **CachingOptimized ≠ completo** | Cache Policy cuida do cache; ORP cuida do que vai ao origin — são independentes |
+| **Error caching** | CloudFront cacheia erros 5xx! Defina TTL baixo (10s) para não propagar |
+| **CloudTrail é essencial** | "Parou do nada" → CloudTrail mostra exatamente quem mudou o quê |
+| **Staging ≠ Prod** | Staging pode funcionar por ter 1 app no ALB; prod com múltiplas apps precisa do Host |
+| **Cache onde faz sentido** | JS, CSS, imagens → cache agressivo. API, admin → zero cache. HTML → cache curto |
+| **DTO savings** | CF na frente do ALB economiza 20-40% em DTO com cache de assets estáticos |
+
+> **💡 Expert Tip:** A regra mais importante ao colocar CloudFront na frente de ALB: **sempre defina uma Origin Request Policy com Host header**. É o erro #1 em produção e o mais difícil de diagnosticar porque o 502 parece vir do ALB/container quando na verdade é o CloudFront que não envia a informação correta. Crie uma ORP chamada "Forward-Host" e use como padrão em todo behavior que aponta para ALB. Sem exceção.
+
+---
+
 **Próximo:** [Módulo 07 — Telemetria, Monitoring e Logs →](modulo-07-telemetria-monitoring.md)
