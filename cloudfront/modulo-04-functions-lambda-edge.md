@@ -38,7 +38,7 @@ sequenceDiagram
 
 | Característica | CloudFront Functions | Lambda@Edge |
 |---------------|---------------------|-------------|
-| **Runtime** | JavaScript (ECMAScript 5.1) | Node.js, Python |
+| **Runtime** | JavaScript (cloudfront-js-2.0, ES6-ES12) | Node.js, Python |
 | **Execução** | Edge Location (~750+) | Regional Edge Cache (~13) |
 | **Duração máxima** | 1ms (viewer), 1ms | 5s (viewer), 30s (origin) |
 | **Memória** | 2 MB | 128-3008 MB (viewer), 128-10240 MB (origin) |
