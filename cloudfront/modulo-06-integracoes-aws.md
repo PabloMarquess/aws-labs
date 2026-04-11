@@ -442,7 +442,7 @@ time curl "https://$DOMAIN/api/slow-report"
 ```
 
 ### Dica Expert
-> **Managed Prefix List** (`com.amazonaws.global.cloudfront.origin-facing`) é a forma mais limpa de restringir o security group do ALB ao CloudFront. A AWS mantém a lista atualizada automaticamente. Antes disso, era preciso uma Lambda que baixava o ip-ranges.json e atualizava o SG — muito mais complexo.
+> **Managed Prefix List** (`com.amazonaws.global.cloudfront.origin-facing` para IPv4, `com.amazonaws.global.ipv6.cloudfront.origin-facing` para IPv6) é a forma mais limpa de restringir o security group do ALB ao CloudFront. A AWS mantém a lista atualizada automaticamente. Antes disso, era preciso uma Lambda que baixava o ip-ranges.json e atualizava o SG — muito mais complexo.
 
 ---
 
@@ -969,7 +969,7 @@ resource "aws_cloudfront_cache_policy" "segments" {
 | **WAF** | **Sim** | Não |
 | **Custo base** | Apenas data transfer | $0.025/hora (~$18/mês) + DT |
 | **Failover** | Origin Groups (reativo) | Health checks (proativo) |
-| **Edge locations** | ~600+ | ~100+ |
+| **Edge locations** | ~750+ | ~100+ |
 | **Gaming/IoT** | Não ideal | **Ideal** |
 | **gRPC** | **Sim** (via HTTP/2) | Sim (TCP) |
 | **Use case principal** | Web content, APIs, streaming | Gaming, IoT, VoIP, non-HTTP |

@@ -1299,11 +1299,11 @@ Entender as camadas de proteção DDoS do CloudFront e quando investir em Shield
 ### Como CloudFront Protege Automaticamente
 
 ```
-Ataque DDoS → CloudFront absorve na edge (600+ locations)
+Ataque DDoS → CloudFront absorve na edge (750+ locations)
                     │
                     ├── Ataques volumétricos (L3/L4)
                     │   → Shield Standard mitiga automaticamente
-                    │   → Distribuído por 600+ edge locations
+                    │   → Distribuído por 750+ edge locations
                     │   → Capacidade de absorção: Tbps
                     │
                     ├── Ataques HTTP flood (L7)

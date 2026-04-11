@@ -40,6 +40,8 @@ Entender o modelo de **Savings Bundle** do CloudFront, calcular economia para di
 
 CloudFront Savings Bundle é um modelo de compromisso financeiro onde você se compromete com um gasto mensal mínimo em troca de até **30% de desconto** sobre o preço on-demand. Diferente de Reserved Instances do EC2, aqui você compromete um **valor em dólares por mês**, não capacidade específica.
 
+> **Nota (2026):** A AWS também lançou os **Flat-Rate Pricing Plans** — planos mensais (Free/Pro/Business/Premium) que combinam CloudFront + WAF + Route 53 + S3 credits em um preço fixo sem overage charges. Avalie qual modelo faz mais sentido para o seu cenário: Savings Bundle (desconto por compromisso) ou Flat-Rate Plan (preço fixo com serviços bundled). Consulte a [documentação oficial](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/flat-rate-pricing-plan.html) para detalhes atualizados.
+
 ### Como Funciona
 
 ```

@@ -9,7 +9,7 @@
 
 ### O que é Amazon CloudFront?
 
-Amazon CloudFront é uma **Content Delivery Network (CDN)** global da AWS. Ele distribui conteúdo (páginas web, vídeos, APIs, arquivos estáticos) através de uma rede de **600+ edge locations** em 90+ cidades ao redor do mundo.
+Amazon CloudFront é uma **Content Delivery Network (CDN)** global da AWS. Ele distribui conteúdo (páginas web, vídeos, APIs, arquivos estáticos) através de uma rede de **750+ edge locations** em 90+ cidades ao redor do mundo.
 
 ### Por que usar CloudFront?
 
@@ -38,7 +38,7 @@ graph LR
     style D fill:#533483,color:#fff
 ```
 
-- **Edge Location**: Ponto de presenca mais proximo do usuario (~600+)
+- **Edge Location**: Ponto de presenca mais proximo do usuario (~750+)
 - **Regional Edge Cache (REC)**: Cache intermediario entre edge e origin (~13 locais)
 - **Origin**: Servidor de origem do conteudo (S3, ALB, EC2, Custom)
 
