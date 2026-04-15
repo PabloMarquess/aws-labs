@@ -13,6 +13,7 @@ Cada workshop contém dezenas de desafios práticos com AWS CLI, Terraform, diag
 | [**CloudFront**](cloudfront/) | 60 | 10 | Completo |
 | [**AWS Security**](aws-security/) | 70 | 10 | Completo |
 | [**API Gateway**](api-gateway/) | 65 | 10 | Completo |
+| [**Cognito**](cognito/) | 60 | 10 | Em andamento |
 
 ---
 
